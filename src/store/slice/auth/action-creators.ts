@@ -1,6 +1,6 @@
 import { Dispatch } from '@reduxjs/toolkit';
 import { api } from '../../../api';
-import { ILoginRequest } from '../../../api/auth/types';
+import { ILoginRequest, ILoginResponse } from '../../../api/auth/types';
 import {
   loginStart,
   loginSuccess,
@@ -12,6 +12,8 @@ import {
 } from './auth-slice';
 import { history } from '../../../utils/history';
 import { store } from '../..';
+import { AxiosPromise } from 'axios';
+import { isTokenExpired } from '../../../utils/jwt';
 
 export const loginUser =
   (data: ILoginRequest) =>
@@ -60,11 +62,26 @@ export const getProfile =
     }
   };
 
+let refreshTokenRequest: AxiosPromise<ILoginResponse> | null = null;
+
 export const getAccessToken =
   () =>
-  (dispatch: Dispatch<any>): string | null => {
+  async (dispatch: Dispatch<any>): Promise<string | null> => {
     try {
       const accessToken = store.getState().auth.authData.accessToken;
+
+      if (!accessToken || isTokenExpired(accessToken)) {
+        if (refreshTokenRequest === null) {
+          refreshTokenRequest = api.auth.refreshToken();
+        }
+
+        const res = await refreshTokenRequest;
+        refreshTokenRequest = null;
+
+        dispatch(loginSuccess(res.data.accessToken));
+
+        return res.data.accessToken;
+      }
 
       return accessToken;
     } catch (e) {
